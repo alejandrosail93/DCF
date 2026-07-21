@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DCF Valuation Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0B0F19; --surface:#131826; --surface-alt:#1B2233; --border:#232B3D;
+    --text:#E7EBF3; --text-dim:#8B94A8; --text-faint:#576079;
+    --green:#3ECF8E; --red:#F0654D; --amber:#E3B341; --blue:#5B8DEF;
+    --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif; --ui:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);font-size:14px;line-height:1.5;}
+  ::selection{background:var(--blue);color:#fff;}
+  a{color:var(--blue);}
+
+  .app{max-width:1180px;margin:0 auto;padding:20px 16px 60px;}
+
+  header.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:20px;}
+  header.top h1{font-family:var(--sans);font-size:19px;font-weight:700;letter-spacing:-0.01em;margin:0;flex-shrink:0;}
+  header.top h1 .sub{display:block;font-family:var(--ui);font-weight:400;font-size:11.5px;color:var(--text-faint);margin-top:2px;letter-spacing:0;}
+
+  .fetch-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto;}
+  .fetch-bar input[type=text]{width:120px;text-transform:uppercase;}
+  input, select{
+    background:var(--surface-alt);border:1px solid var(--border);color:var(--text);
+    padding:8px 10px;border-radius:6px;font-family:var(--mono);font-size:13px;
+  }
+  input:focus, select:focus{outline:none;border-color:var(--blue);}
+  button{
+    background:var(--blue);color:#fff;border:none;padding:9px 16px;border-radius:6px;
+    font-family:var(--ui);font-weight:600;font-size:13px;cursor:pointer;
+  }
+  button:hover{filter:brightness(1.1);}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text-dim);}
+  button.ghost:hover{border-color:var(--text-dim);color:var(--text);}
+  button:disabled{opacity:0.5;cursor:wait;}
+
+  #fetchStatus{font-size:12px;color:var(--text-faint);width:100%;margin-top:-4px;min-height:16px;}
+  #fetchStatus.err{color:var(--red);}
+  #fetchStatus.ok{color:var(--green);}
+
+  .grid{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start;}
+  @media (max-width:840px){.grid{grid-template-columns:1fr;}}
+
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;}
+  .panel + .panel{margin-top:14px;}
+
+  details.section{border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:var(--surface);overflow:hidden;}
+  details.section summary{
+    padding:11px 14px;cursor:pointer;font-family:var(--sans);font-weight:600;font-size:12.5px;
+    color:var(--text-dim);list-style:none;display:flex;justify-content:space-between;align-items:center;
+    text-transform:uppercase;letter-spacing:0.04em;
+  }
+  details.section summary::-webkit-details-marker{display:none;}
+  details.section summary::after{content:'+';font-size:16px;color:var(--text-faint);}
+  details.section[open] summary::after{content:'–';}
+  details.section[open] summary{border-bottom:1px solid var(--border);color:var(--text);}
+  .section-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:9px;}
+
+  .field{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .field label{font-size:12px;color:var(--text-dim);flex:1;}
+  .field input, .field select{width:96px;text-align:right;}
+  .field input[type=text]{text-align:left;}
+  .field.wide input{width:100%;text-align:left;}
+  .field.checkbox{justify-content:flex-start;}
+  .field.checkbox input{width:auto;}
+  .field.checkbox label{flex:none;}
+
+  .hint{font-size:10.5px;color:var(--text-faint);margin-top:-4px;}
+
+  main.results{display:flex;flex-direction:column;gap:16px;}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;}
+  .card .label{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
+  .card .value{font-family:var(--mono);font-size:21px;font-weight:600;}
+  .card .value.big{font-size:26px;}
+  .card.hero{background:linear-gradient(135deg,var(--surface-alt),var(--surface));border-color:var(--blue);}
+  .up{color:var(--green);} .down{color:var(--red);}
+
+  .tv-gauge{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+  .tv-gauge .row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-dim);margin-bottom:8px;}
+  .tv-gauge .bar{height:10px;border-radius:5px;background:var(--surface-alt);overflow:hidden;display:flex;}
+  .tv-gauge .bar .seg-explicit{background:var(--blue);}
+  .tv-gauge .bar .seg-terminal{background:var(--amber);}
+  .tv-gauge .legend{display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text-dim);}
+  .tv-gauge .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:8px;height:8px;border-radius:2px;display:inline-block;}
+  .tv-warning{color:var(--amber);font-size:11px;margin-top:8px;}
+
+  .chart-row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;}
+  @media (max-width:700px){.chart-row{grid-template-columns:1fr;}}
+  .chart-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;height:260px;}
+  .chart-box h3{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;}
+
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;}
+  th,td{padding:7px 8px;text-align:right;white-space:nowrap;}
+  th{color:var(--text-faint);font-weight:500;font-size:10.5px;text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid var(--border);}
+  td{border-bottom:1px solid var(--surface-alt);}
+  th:first-child,td:first-child{text-align:left;}
+  tbody tr:hover{background:var(--surface-alt);}
+  .proj-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;}
+  .proj-wrap h3, .sens-wrap h3, .xcheck h3{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;}
+
+  .sens-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;}
+  #sensTable td, #sensTable th{text-align:center;}
+  #sensTable td{border-radius:4px;font-weight:500;}
+  #sensTable td.base{outline:2px solid var(--text);outline-offset:-2px;}
+  #sensTable th.axis-label{color:var(--text-faint);font-family:var(--ui);}
+
+  .xcheck{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12.5px;color:var(--text-dim);}
+  .xcheck b{color:var(--text);font-family:var(--mono);}
+
+  footer{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding-top:14px;}
+  footer p{font-size:11px;color:var(--text-faint);margin:0;max-width:560px;}
+  .io-buttons{display:flex;gap:8px;}
+  #importFile{display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <h1>DCF Valuation Dashboard<span class="sub">Modello unlevered FCF a più stadi — standalone</span></h1>
+    <div class="fetch-bar">
+      <input type="text" id="tickerInput" placeholder="TICKER" value="MSFT">
+      <button id="fetchBtn">Fetch prezzo</button>
+      <button class="ghost" id="resetBtn">Reset esempio</button>
+    </div>
+    <div id="fetchStatus"></div>
+  </header>
+
+  <div class="grid">
+
+    <!-- ASSUMPTIONS SIDEBAR -->
+    <aside>
+      <details class="section" open>
+        <summary>Azienda &amp; mercato</summary>
+        <div class="section-body">
+          <div class="field wide"><label>Nome</label></div>
+          <div class="field wide"><input type="text" id="companyName" value="Esempio SpA" placeholder="—"></div>
+          <div class="field"><label>Prezzo corrente</label><input type="number" id="currentPrice" step="0.01" value="50"></div>
+          <div class="field"><label>Valuta</label><input type="text" id="currency" value="EUR" style="width:96px;text-align:right;"></div>
+          <div class="field"><label>Azioni in circ. (mln)</label><input type="number" id="sharesOut" step="0.1" value="100"></div>
+          <div class="field"><label>Beta</label><input type="number" id="beta" step="0.01" value="1.10"></div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>Ricavi &amp; margini</summary>
+        <div class="section-body">
+          <div class="field"><label>Ricavi base (mln, ultimo FY)</label><input type="number" id="baseRevenue" step="1" value="1000"></div>
+          <div class="field"><label>Margine EBIT base (%)</label><input type="number" id="ebitMargin0" step="0.1" value="20"></div>
+          <div class="field"><label>Margine EBIT terminale (%)</label><input type="number" id="ebitMarginT" step="0.1" value="20"></div>
+          <div class="hint">Se diverso dal base, il margine converge linearmente su N anni.</div>
+          <div class="field"><label>Aliquota fiscale eff. (%)</label><input type="number" id="taxRate" step="0.1" value="25"></div>
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>Capex, D&amp;A, NWC</summary>
+        <div class="section-body">
+          <div class="field"><label>D&amp;A (% ricavi)</label><input type="number" id="daPct" step="0.1" value="4"></div>
+          <div class="field"><label>Capex (% ricavi)</label><input type="number" id="capexPct" step="0.1" value="5"></div>
+          <div class="field"><label>Δ NWC (% Δricavi)</label><input type="number" id="nwcPct" step="0.1" value="10"></div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>Struttura capitale &amp; WACC</summary>
+        <div class="section-body">
+          <div class="field"><label>Debito totale (mln)</label><input type="number" id="totalDebt" step="1" value="200"></div>
+          <div class="field"><label>Cassa &amp; equiv. (mln)</label><input type="number" id="cash" step="1" value="80"></div>
+          <div class="field"><label>Risk-free rate (%)</label><input type="number" id="riskFree" step="0.05" value="3.5"></div>
+          <div class="field"><label>Equity Risk Premium (%)</label><input type="number" id="erp" step="0.05" value="5"></div>
+          <div class="field"><label>Costo debito pre-tax (%)</label><input type="number" id="costDebt" step="0.05" value="5"></div>
+          <div class="field"><label>Market cap (auto, mln)</label><input type="text" id="marketCapDisplay" disabled value="—"></div>
+          <div class="field"><label><b>WACC calcolato</b></label><input type="text" id="waccDisplay" disabled value="—"></div>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>Crescita &amp; valore terminale</summary>
+        <div class="section-body">
+          <div class="field"><label>Crescita anno 1 (%)</label><input type="number" id="g1" step="0.1" value="10"></div>
+          <div class="field"><label>Anni di previsione (N)</label><input type="number" id="forecastYears" step="1" min="3" max="10" value="5"></div>
+          <div class="field"><label>Crescita terminale g (%)</label><input type="number" id="gT" step="0.05" value="2.5"></div>
+          <div class="field checkbox"><input type="checkbox" id="midYear" checked><label for="midYear">Convenzione mid-year</label></div>
+          <div class="field"><label>Metodo valore terminale</label>
+            <select id="terminalMethod" style="width:130px;text-align:left;">
+              <option value="gordon" selected>Gordon Growth</option>
+              <option value="multiple">Multiplo uscita</option>
+            </select>
+          </div>
+          <div class="field" id="exitMultipleRow" style="display:none;"><label>Multiplo EV/EBITDA uscita</label><input type="number" id="exitMultiple" step="0.1" value="10"></div>
+        </div>
+      </details>
+    </aside>
+
+    <!-- RESULTS -->
+    <main class="results">
+
+      <div class="cards">
+        <div class="card hero">
+          <div class="label">Fair value / azione</div>
+          <div class="value big" id="outFairValue">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Prezzo corrente</div>
+          <div class="value" id="outCurrentPrice">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Upside / downside</div>
+          <div class="value" id="outUpside">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Enterprise value</div>
+          <div class="value" id="outEV">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Equity value</div>
+          <div class="value" id="outEquityValue">—</div>
+        </div>
+      </div>
+
+      <div class="tv-gauge">
+        <div class="row"><span>Composizione Enterprise Value</span><span id="tvPctLabel">—</span></div>
+        <div class="bar"><div class="seg-explicit" id="segExplicit"></div><div class="seg-terminal" id="segTerminal"></div></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--blue)"></span>PV flussi espliciti</span>
+          <span><span class="dot" style="background:var(--amber)"></span>PV valore terminale</span>
+        </div>
+        <div class="tv-warning" id="tvWarning" style="display:none;">⚠ Il valore terminale rappresenta più del 75% dell'EV: la valutazione dipende fortemente dalle ipotesi di lungo periodo. Verifica g e WACC con attenzione.</div>
+      </div>
+
+      <div class="chart-row">
+        <div class="chart-box"><h3>Proiezione FCF &amp; valore attuale</h3><canvas id="fcfChart"></canvas></div>
+        <div class="chart-box"><h3>Ricavi vs margine EBIT</h3><canvas id="revChart"></canvas></div>
+      </div>
+
+      <div class="proj-wrap">
+        <h3>Proiezione flussi di cassa (unlevered FCF)</h3>
+        <div style="overflow-x:auto;">
+        <table id="projTable">
+          <thead><tr>
+            <th>Anno</th><th>Crescita</th><th>Ricavi</th><th>Marg. EBIT</th><th>EBIT</th><th>NOPAT</th>
+            <th>D&amp;A</th><th>Capex</th><th>ΔNWC</th><th>FCF</th><th>Fatt. sconto</th><th>VA (FCF)</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="sens-wrap">
+        <h3>Sensitivity — fair value/azione (WACC × crescita terminale)</h3>
+        <table id="sensTable"></table>
+      </div>
+
+      <div class="xcheck" id="xcheck"></div>
+
+    </main>
+  </div>
+
+  <footer>
+    <p>Il fetch automatico recupera solo prezzo corrente, valuta e nome azienda da Yahoo Finance (endpoint pubblico "chart", senza autenticazione) tramite proxy CORS — può comunque fallire se il proxy è temporaneamente giù. Tutti i dati fondamentali (ricavi, margini, D&amp;A, capex, NWC, tax rate, debito, cassa, azioni in circolazione, beta) vanno sempre inseriti manualmente da bilancio: l'endpoint Yahoo che li fornirebbe richiede da fine 2023 un'autenticazione a cookie/crumb non ottenibile in modo affidabile da qui.</p>
+    <div class="io-buttons">
+      <button class="ghost" id="exportBtn">Esporta ipotesi (.json)</button>
+      <button class="ghost" id="importBtn">Importa ipotesi</button>
+      <input type="file" id="importFile" accept=".json">
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* ============================= DCF ENGINE ============================= */
+function runDCF(a){
+  const years=[];
+  let prevRevenue=a.baseRevenue;
+  for(let t=1;t<=a.forecastYears;t++){
+    const growth = a.forecastYears===1 ? a.g1 : a.g1 + (a.gT-a.g1)*(t-1)/(a.forecastYears-1);
+    const revenue = prevRevenue*(1+growth);
+    const margin = a.ebitMargin0 + (a.ebitMarginT-a.ebitMargin0)*(t/a.forecastYears);
+    const ebit = revenue*margin;
+    const nopat = ebit*(1-a.taxRate);
+    const da = revenue*a.daPct;
+    const capex = revenue*a.capexPct;
+    const deltaNWC = (revenue-prevRevenue)*a.nwcPct;
+    const fcf = nopat+da-capex-deltaNWC;
+    const discPeriod = a.midYear ? (t-0.5) : t;
+    const df = 1/Math.pow(1+a.wacc, discPeriod);
+    const pv = fcf*df;
+    years.push({t,growth,revenue,margin,ebit,nopat,da,capex,deltaNWC,fcf,df,pv,ebitda:ebit+da});
+    prevRevenue=revenue;
+  }
+  const last=years[years.length-1];
+  const fcfNext = last.fcf*(1+a.gT);
+  let tv;
+  if(a.terminalMethod==='gordon'){
+    tv = fcfNext/(a.wacc-a.gT);
+  } else {
+    tv = last.ebitda*a.exitMultiple;
+  }
+  const pvTV = tv*last.df;
+  const sumPvFcf = years.reduce((s,y)=>s+y.pv,0);
+  const ev = sumPvFcf+pvTV;
+  const netDebt = a.totalDebt-a.cash;
+  const equityValue = ev-netDebt;
+  const fairValuePerShare = equityValue/a.sharesOutstanding;
+  const tvPctOfEV = pvTV/ev;
+  const impliedGrowthFromMultiple = (tv*a.wacc-last.fcf)/(tv+last.fcf);
+  const impliedMultipleFromGordon = tv/last.ebitda;
+  return {years,tv,pvTV,sumPvFcf,ev,netDebt,equityValue,fairValuePerShare,tvPctOfEV,
+           impliedGrowthFromMultiple,impliedMultipleFromGordon,fcfNext};
+}
+
+/* ============================= STATE / DOM ============================= */
+const $ = id => document.getElementById(id);
+const fields = ['companyName','currentPrice','currency','sharesOut','beta','baseRevenue','ebitMargin0',
+  'ebitMarginT','taxRate','daPct','capexPct','nwcPct','totalDebt','cash','riskFree','erp','costDebt',
+  'g1','forecastYears','gT','terminalMethod','exitMultiple'];
+
+function readAssumptions(){
+  const pct = v => parseFloat(v)/100;
+  const num = v => parseFloat(v);
+  const currentPrice = num($('currentPrice').value);
+  const sharesOut = num($('sharesOut').value);
+  const totalDebt = num($('totalDebt').value);
+  const cash = num($('cash').value);
+  const beta = num($('beta').value);
+  const riskFree = pct($('riskFree').value);
+  const erp = pct($('erp').value);
+  const costDebtPre = pct($('costDebt').value);
+  const taxRate = pct($('taxRate').value);
+
+  const marketCap = currentPrice*sharesOut;
+  const costEquity = riskFree + beta*erp;
+  const costDebtAT = costDebtPre*(1-taxRate);
+  const wE = marketCap/(marketCap+totalDebt);
+  const wD = totalDebt/(marketCap+totalDebt);
+  const wacc = wE*costEquity + wD*costDebtAT;
+
+  return {
+    baseRevenue:num($('baseRevenue').value),
+    ebitMargin0:pct($('ebitMargin0').value),
+    ebitMarginT:pct($('ebitMarginT').value),
+    daPct:pct($('daPct').value),
+    capexPct:pct($('capexPct').value),
+    nwcPct:pct($('nwcPct').value),
+    taxRate, g1:pct($('g1').value), gT:pct($('gT').value),
+    forecastYears:parseInt($('forecastYears').value),
+    midYear:$('midYear').checked,
+    terminalMethod:$('terminalMethod').value,
+    exitMultiple:num($('exitMultiple').value),
+    sharesOut, totalDebt, cash, currentPrice,
+    marketCap, costEquity, costDebtAT, wacc
+  };
+}
+
+const fmt = (v,d=1) => isFinite(v) ? v.toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}) : '—';
+const fmtPct = (v,d=1) => isFinite(v) ? (v*100).toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d})+'%' : '—';
+
+let fcfChart, revChart;
+
+function render(){
+  const a = readAssumptions();
+  a.wacc = a.wacc; // computed
+  const r = runDCF(a);
+  const cur = $('currency').value || '';
+
+  $('marketCapDisplay').value = fmt(a.marketCap,0)+' mln';
+  $('waccDisplay').value = fmtPct(a.wacc,2);
+
+  $('outFairValue').textContent = fmt(r.fairValuePerShare,2)+' '+cur;
+  $('outCurrentPrice').textContent = fmt(a.currentPrice,2)+' '+cur;
+  const upside = r.fairValuePerShare/a.currentPrice - 1;
+  const upEl = $('outUpside');
+  upEl.textContent = (upside>=0?'+':'')+fmtPct(upside,1);
+  upEl.className = 'value ' + (upside>=0?'up':'down');
+  $('outEV').textContent = fmt(r.ev,0)+' mln';
+  $('outEquityValue').textContent = fmt(r.equityValue,0)+' mln';
+
+  const tvPct = r.tvPctOfEV*100;
+  $('segExplicit').style.width = (100-tvPct)+'%';
+  $('segTerminal').style.width = tvPct+'%';
+  $('tvPctLabel').textContent = 'PV espliciti '+fmt(100-tvPct,0)+'% · PV terminale '+fmt(tvPct,0)+'%';
+  $('tvWarning').style.display = tvPct>75 ? 'block':'none';
+
+  // projection table
+  const tbody = document.querySelector('#projTable tbody');
+  tbody.innerHTML = '';
+  r.years.forEach(y=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>Anno ${y.t}</td><td>${fmtPct(y.growth)}</td><td>${fmt(y.revenue,0)}</td>
+      <td>${fmtPct(y.margin)}</td><td>${fmt(y.ebit,0)}</td><td>${fmt(y.nopat,0)}</td>
+      <td>${fmt(y.da,0)}</td><td>${fmt(y.capex,0)}</td><td>${fmt(y.deltaNWC,0)}</td>
+      <td>${fmt(y.fcf,0)}</td><td>${fmt(y.df,3)}</td><td>${fmt(y.pv,0)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // cross-check panel
+  if(a.terminalMethod==='gordon'){
+    $('xcheck').innerHTML = `<h3>Cross-check</h3>Il valore terminale (Gordon Growth, g=${fmtPct(a.gT)}) implica un multiplo
+      EV/EBITDA in uscita di <b>${fmt(r.impliedMultipleFromGordon,1)}x</b>. Confronta questo multiplo con i comparable
+      del settore per validare l'ipotesi di crescita terminale.`;
+  } else {
+    $('xcheck').innerHTML = `<h3>Cross-check</h3>Il multiplo di uscita EV/EBITDA di <b>${fmt(a.exitMultiple,1)}x</b> implica
+      una crescita terminale (Gordon Growth) di <b>${fmtPct(r.impliedGrowthFromMultiple,2)}</b>. Verifica che sia coerente
+      con la crescita nominale di lungo periodo attesa per il settore/paese.`;
+  }
+
+  renderCharts(r);
+  renderSensitivity(a);
+}
+
+function renderCharts(r){
+  const labels = r.years.map(y=>'Anno '+y.t);
+  const fcfData = r.years.map(y=>y.fcf);
+  const pvData = r.years.map(y=>y.pv);
+  const revData = r.years.map(y=>y.revenue);
+  const marginData = r.years.map(y=>y.margin*100);
+
+  if(fcfChart) fcfChart.destroy();
+  fcfChart = new Chart($('fcfChart'), {
+    type:'bar',
+    data:{labels, datasets:[
+      {label:'FCF', data:fcfData, backgroundColor:'#5B8DEF', borderRadius:4},
+      {label:'VA (FCF)', data:pvData, backgroundColor:'#3ECF8E', borderRadius:4}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#8B94A8',font:{size:11}}}},
+      scales:{
+        x:{ticks:{color:'#8B94A8',font:{size:10}},grid:{color:'#232B3D'}},
+        y:{ticks:{color:'#8B94A8',font:{size:10}},grid:{color:'#232B3D'}}
+      }}
+  });
+
+  if(revChart) revChart.destroy();
+  revChart = new Chart($('revChart'), {
+    type:'bar',
+    data:{labels, datasets:[
+      {type:'bar', label:'Ricavi', data:revData, backgroundColor:'#1B2233', borderColor:'#5B8DEF', borderWidth:1.5, borderRadius:4, yAxisID:'y'},
+      {type:'line', label:'Margine EBIT %', data:marginData, borderColor:'#E3B341', backgroundColor:'#E3B341', tension:0.3, yAxisID:'y1'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#8B94A8',font:{size:11}}}},
+      scales:{
+        x:{ticks:{color:'#8B94A8',font:{size:10}},grid:{display:false}},
+        y:{position:'left',ticks:{color:'#8B94A8',font:{size:10}},grid:{color:'#232B3D'}},
+        y1:{position:'right',ticks:{color:'#8B94A8',font:{size:10}},grid:{display:false}}
+      }}
+  });
+}
+
+function renderSensitivity(a){
+  const waccBase = a.wacc, gBase = a.gT;
+  const waccSteps = [-0.01,-0.005,0,0.005,0.01].map(d=>waccBase+d);
+  const gSteps = [-0.01,-0.005,0,0.005,0.01].map(d=>gBase+d);
+
+  let html = '<thead><tr><th></th>';
+  gSteps.forEach(g=> html += `<th class="axis-label">g=${fmtPct(g,2)}</th>`);
+  html += '</tr></thead><tbody>';
+
+  // find min/max for color scale
+  let values = [];
+  waccSteps.forEach(w=>gSteps.forEach(g=>{
+    if(w<=g){values.push(null);return;}
+    const res = runDCF({...a, wacc:w, gT:g});
+    values.push(res.fairValuePerShare);
+  }));
+  const finite = values.filter(v=>v!==null);
+  const min = Math.min(...finite), max = Math.max(...finite);
+
+  let idx=0;
+  waccSteps.forEach(w=>{
+    html += `<tr><th class="axis-label">WACC=${fmtPct(w,2)}</th>`;
+    gSteps.forEach(g=>{
+      const v = values[idx++];
+      if(v===null){ html += '<td style="color:var(--text-faint)">n/a</td>'; return; }
+      const t = (v-min)/(max-min||1);
+      // color scale: red (low) -> surface -> green (high)
+      const r = Math.round(240 - t*140);
+      const gr = Math.round(101 + t*106);
+      const b = Math.round(77 + t*45);
+      const isBase = Math.abs(w-waccBase)<1e-9 && Math.abs(g-gBase)<1e-9;
+      html += `<td class="${isBase?'base':''}" style="background:rgba(${r},${gr},${b},0.28)">${fmt(v,2)}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  $('sensTable').innerHTML = html;
+}
+
+/* ============================= EVENTS ============================= */
+document.querySelectorAll('.grid input, .grid select').forEach(el=>{
+  el.addEventListener('input', render);
+  el.addEventListener('change', render);
+});
+
+$('terminalMethod').addEventListener('change', ()=>{
+  $('exitMultipleRow').style.display = $('terminalMethod').value==='multiple' ? 'flex':'none';
+});
+
+$('resetBtn').addEventListener('click', ()=>location.reload());
+
+$('exportBtn').addEventListener('click', ()=>{
+  const data = {};
+  fields.forEach(id=>{ const el=$(id); data[id] = el.type==='checkbox' ? el.checked : el.value; });
+  data.midYear = $('midYear').checked;
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download = (($('tickerInput').value||'dcf')+'_ipotesi.json');
+  a.click(); URL.revokeObjectURL(url);
+});
+
+$('importBtn').addEventListener('click', ()=> $('importFile').click());
+$('importFile').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      Object.keys(data).forEach(id=>{
+        const el = $(id); if(!el) return;
+        if(el.type==='checkbox') el.checked = data[id]; else el.value = data[id];
+      });
+      $('exitMultipleRow').style.display = $('terminalMethod').value==='multiple' ? 'flex':'none';
+      render();
+      setStatus('Ipotesi importate correttamente.', 'ok');
+    }catch(err){ setStatus('File non valido.', 'err'); }
+  };
+  reader.readAsText(file);
+});
+
+function setStatus(msg, cls){
+  const el = $('fetchStatus');
+  el.textContent = msg;
+  el.className = cls||'';
+}
+
+/* ============================= YAHOO FETCH (solo prezzo — crumb-free) =============================
+   Nota tecnica: l'endpoint quoteSummary (fondamentali) richiede da fine 2023 un cookie+crumb di sessione
+   che non è ottenibile in modo affidabile da una pagina statica dietro proxy CORS pubblici — per questo
+   qui si usa SOLO l'endpoint v8/chart, che resta pubblico e non richiede autenticazione. I fondamentali
+   restano sempre a inserimento manuale.
+   Architettura identica a MomentumIQ/TrendIQ: due host Yahoo (query1/query2) × 4 proxy, con timeout per
+   tentativo (un proxy sovraccarico altrimenti resta "appeso" invece di fallire e passare al successivo —
+   è la causa più probabile di un fetch che sembra non fare nulla). allorigins usa /get, che incapsula
+   la risposta in {contents:"..."} e va scompattata separatamente dagli altri proxy. */
+async function fetchFromYahoo(ticker){
+  const hosts = ['query1','query2'];
+  const proxies = [
+    {name:'allorigins', build:u=>`https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, wrapped:true},
+    {name:'codetabs',   build:u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, wrapped:false},
+    {name:'corsproxy.io', build:u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`, wrapped:false},
+    {name:'thingproxy', build:u=>`https://thingproxy.freeboard.io/fetch/${encodeURIComponent(u)}`, wrapped:false}
+  ];
+  const attempts = [];
+  for(const host of hosts){
+    const yahooUrl = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1d`;
+    for(const proxy of proxies){
+      try{
+        const res = await fetch(proxy.build(yahooUrl), {signal: AbortSignal.timeout(9000)});
+        const text = await res.text();
+        if(!res.ok){
+          attempts.push(`${host}·${proxy.name}: HTTP ${res.status}`);
+          console.warn(`[DCF fetch] ${host}/${proxy.name} -> HTTP ${res.status}`, text.slice(0,150));
+          continue;
+        }
+        let json;
+        try{
+          const parsed = JSON.parse(text);
+          json = (proxy.wrapped && parsed?.contents)
+            ? (typeof parsed.contents==='string' ? JSON.parse(parsed.contents) : parsed.contents)
+            : parsed;
+        }catch(parseErr){
+          attempts.push(`${host}·${proxy.name}: risposta non-JSON`);
+          console.warn(`[DCF fetch] ${host}/${proxy.name} -> non-JSON:`, text.slice(0,150));
+          continue;
+        }
+        const result = json?.chart?.result?.[0];
+        if(!result || !result.meta){
+          const desc = json?.chart?.error?.description || 'formato inatteso';
+          attempts.push(`${host}·${proxy.name}: ${desc}`);
+          console.warn(`[DCF fetch] ${host}/${proxy.name} -> senza dati:`, json);
+          continue;
+        }
+        console.info(`[DCF fetch] riuscito via ${host}/${proxy.name}`);
+        return result;
+      }catch(e){
+        const reason = e.name==='TimeoutError' ? 'timeout (9s)' : e.message;
+        attempts.push(`${host}·${proxy.name}: ${reason}`);
+        console.warn(`[DCF fetch] ${host}/${proxy.name} -> errore:`, e);
+      }
+      await new Promise(r=>setTimeout(r,150));
+    }
+  }
+  console.error('[DCF fetch] tutti i tentativi falliti:', attempts);
+  throw new Error(attempts.join(' · '));
+}
+
+function safe(fn, fallback){ try{ const v=fn(); return (v===undefined||v===null||Number.isNaN(v))?fallback:v; }catch(e){ return fallback; } }
+
+function applyYahooData(result){
+  const meta = result.meta;
+  const price = safe(()=>meta.regularMarketPrice, null);
+  const currency = safe(()=>meta.currency, null);
+  const name = safe(()=>meta.longName ?? meta.shortName ?? meta.symbol, $('tickerInput').value.toUpperCase());
+
+  if(price!==null) $('currentPrice').value = price;
+  if(currency) $('currency').value = currency;
+  $('companyName').value = name;
+  render();
+}
+
+$('fetchBtn').addEventListener('click', async ()=>{
+  const ticker = $('tickerInput').value.trim().toUpperCase();
+  if(!ticker){ setStatus('Inserisci un ticker.', 'err'); return; }
+  $('fetchBtn').disabled = true;
+  setStatus('Recupero prezzo da Yahoo Finance…');
+  try{
+    const result = await fetchFromYahoo(ticker);
+    applyYahooData(result);
+    setStatus('Prezzo, valuta e nome aggiornati. Tutti i dati fondamentali restano da inserire manualmente.', 'ok');
+  }catch(e){
+    setStatus('Fetch fallito — '+e.message+'. Apri la console del browser (F12) per il dettaglio di ogni proxy provato. Inserisci prezzo e nome manualmente.', 'err');
+  }finally{
+    $('fetchBtn').disabled = false;
+  }
+});
+
+/* ============================= INIT ============================= */
+render();
+</script>
+</body>
+</html>
