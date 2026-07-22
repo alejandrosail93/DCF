@@ -271,8 +271,16 @@
     <p>Il fetch automatico recupera solo prezzo corrente, valuta e nome azienda da Yahoo Finance (endpoint pubblico "chart", senza autenticazione) tramite proxy CORS — può comunque fallire se il proxy è temporaneamente giù. Tutti i dati fondamentali (ricavi, margini, D&amp;A, capex, NWC, tax rate, debito, cassa, azioni in circolazione, beta) vanno sempre inseriti manualmente da bilancio: l'endpoint Yahoo che li fornirebbe richiede da fine 2023 un'autenticazione a cookie/crumb non ottenibile in modo affidabile da qui.</p>
     <div class="io-buttons">
       <button class="ghost" id="exportBtn">Esporta ipotesi (.json)</button>
-      <button class="ghost" id="importBtn">Importa ipotesi</button>
+      <button class="ghost" id="importBtn">Importa ipotesi (file)</button>
       <input type="file" id="importFile" accept=".json">
+      <button class="ghost" id="pasteToggleBtn">Incolla JSON</button>
+    </div>
+    <div id="pastePanel" style="display:none;width:100%;margin-top:10px;">
+      <textarea id="pasteArea" rows="6" placeholder="Incolla qui il JSON copiato dal DCF Data Finder (o da qualsiasi altra fonte, purché usi gli stessi campi)…" style="width:100%;background:var(--surface-alt);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical;"></textarea>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px;">
+        <button id="applyPasteBtn">Applica</button>
+        <span id="pasteStatus" style="font-size:11.5px;color:var(--text-faint);"></span>
+      </div>
     </div>
   </footer>
 
@@ -520,24 +528,48 @@ $('exportBtn').addEventListener('click', ()=>{
   a.click(); URL.revokeObjectURL(url);
 });
 
+function applyImportedData(data){
+  Object.keys(data).forEach(id=>{
+    const el = $(id); if(!el) return;
+    if(el.type==='checkbox') el.checked = data[id]; else el.value = data[id];
+  });
+  $('exitMultipleRow').style.display = $('terminalMethod').value==='multiple' ? 'flex':'none';
+  render();
+}
+
 $('importBtn').addEventListener('click', ()=> $('importFile').click());
 $('importFile').addEventListener('change', e=>{
   const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
   reader.onload = ()=>{
     try{
-      const data = JSON.parse(reader.result);
-      Object.keys(data).forEach(id=>{
-        const el = $(id); if(!el) return;
-        if(el.type==='checkbox') el.checked = data[id]; else el.value = data[id];
-      });
-      $('exitMultipleRow').style.display = $('terminalMethod').value==='multiple' ? 'flex':'none';
-      render();
-      setStatus('Ipotesi importate correttamente.', 'ok');
+      applyImportedData(JSON.parse(reader.result));
+      setStatus('Ipotesi importate correttamente dal file.', 'ok');
     }catch(err){ setStatus('File non valido.', 'err'); }
   };
   reader.readAsText(file);
 });
+
+$('pasteToggleBtn').addEventListener('click', ()=>{
+  const panel = $('pastePanel');
+  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+});
+$('applyPasteBtn').addEventListener('click', ()=>{
+  const raw = $('pasteArea').value.trim();
+  if(!raw){ setPasteStatus('Incolla prima il JSON nel riquadro.', 'err'); return; }
+  try{
+    applyImportedData(JSON.parse(raw));
+    setPasteStatus('Ipotesi applicate correttamente.', 'ok');
+    setStatus('Ipotesi applicate da JSON incollato.', 'ok');
+  }catch(err){
+    setPasteStatus('JSON non valido: '+err.message, 'err');
+  }
+});
+function setPasteStatus(msg, cls){
+  const el = $('pasteStatus');
+  el.textContent = msg;
+  el.style.color = cls==='ok' ? 'var(--green)' : (cls==='err' ? 'var(--red)' : 'var(--text-faint)');
+}
 
 function setStatus(msg, cls){
   const el = $('fetchStatus');
