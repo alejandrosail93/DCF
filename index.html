@@ -320,7 +320,7 @@ function runDCF(a){
   const ev = sumPvFcf+pvTV;
   const netDebt = a.totalDebt-a.cash;
   const equityValue = ev-netDebt;
-  const fairValuePerShare = equityValue/a.sharesOutstanding;
+  const fairValuePerShare = equityValue/a.sharesOut;
   const tvPctOfEV = pvTV/ev;
   const impliedGrowthFromMultiple = (tv*a.wacc-last.fcf)/(tv+last.fcf);
   const impliedMultipleFromGordon = tv/last.ebitda;
